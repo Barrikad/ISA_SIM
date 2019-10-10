@@ -160,7 +160,7 @@ class RegisterFile:
             def layer2(r2):
                 def layer3(r3):
                         if self.read_register(r2) == self.read_register(r3):
-                            simulation.jumpPC(self.read_register(r1) - 1)
+                            simulation.jumpPC(self.read_register(r1))
                 return layer3
             return layer2
         return layer1
@@ -170,7 +170,7 @@ class RegisterFile:
             def layer2(r2):
                 def layer3(r3):
                     if self.read_register(r2) < self.read_register(r3):
-                        simulation.jumpPC(self.read_register(r1) - 1)
+                        simulation.jumpPC(self.read_register(r1))
                 return layer3
             return layer2
         return layer1
@@ -434,7 +434,8 @@ class simulation:
     
     #jump to instruction at gotoValue
     def jumpPC(self,gotoValue):
-        self.PC = (gotoValue-1) % 256
+        print("jumped to " + str(gotoValue))
+        self.PC = (gotoValue - 1) % 256
 
     """
     Method for executing operation at address: PC
