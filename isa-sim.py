@@ -64,9 +64,10 @@ class RegisterFile:
         print('Register file content:')
         for i in range(0, 16):
             self.print_register('R' + str(i))
-            
-    #Functions based on mf-ing currying!
-    #0ary
+    """     
+    Functions based on currying!
+    0ary functions
+    """
     def NOP(self,simulation):
         return 0
     
@@ -74,13 +75,19 @@ class RegisterFile:
         print("End command reached")
         simulation.end = True
     
-    #1ary
+    
+    """
+    1ary functions
+    """
     def JR(self,simulation):
         def layer1(r1):
-            simulation.jumpPC(self.read_register(r1) - 1)
+            simulation.jumpPC(self.read_register(r1))
         return layer1
       
-    #2ary
+        
+    """
+    2ary functions
+    """
     def NOT(self,simulation):
         def layer1(r1):
             def layer2(r2):
@@ -109,7 +116,9 @@ class RegisterFile:
             return layer2
         return layer1
     
-    #3ary
+    """
+    3ary functions
+    """
     def ADD(self,simulation):
         def layer1(r1):
             def layer2(r2):
@@ -396,57 +405,87 @@ class InstructionMemory:
                 print('Address ' + str(address) + ' = ', end='')
                 self.print_instruction(address)
 
+
+"""
+This class contains all methods for running the simulation, and objects edited during simulation
+"""
 class simulation:
     def __init__(self):
+        #initiate variables
         self.PC = 0
         self.cycle = 0
         self.end = False
         self.max_cycles = int(sys.argv[1])
+        
+        #initiate object of other classes
         self.registerFile = RegisterFile()
         self.dataMemory = DataMemory()
         self.instructionMemory = InstructionMemory()
     
+    
+    """
+    Three methods for incrementing and editing pc and cycle
+    """
     def incrementPC(self):
         self.PC = (self.PC + 1) % 256
-    
+
     def incrementCycle(self):
         self.cycle += 1
     
+    #jump to instruction at gotoValue
     def jumpPC(self,gotoValue):
-        self.PC = gotoValue % 256
+        self.PC = (gotoValue-1) % 256
 
+    """
+    Method for executing operation at address: PC
+    """
     def executeOperation(self):
+        #find operation to be executed
         operation = self.instructionMemory.read_opcode(self.PC)
-        for i in range(4):
+        
+        for i in range(4):#find number of parameters taken by the operation
             if operation in self.registerFile.functions[i]:
+                
+                #give operation method simulation as argument
                 function = self.registerFile.functions[i][operation](self)
+                
+                #Add registers as argument one by one, via currying
                 r = 0
                 while r < i:
                     function = function(self.instructionMemory.operands[r](self.PC))
                     r += 1
+                
                 break
-            
+    
+    """
+    Method that runs one cycle of the simulation
+    """
     def executeCycle(self):
+        #Display
         print("----------------------------------")
         print("Cycle: " + str(self.cycle))
         print("PC: " + str(self.PC))
         print("Instruction executed:")
         self.instructionMemory.print_instruction(self.PC)
-        self.executeOperation()
         print("----------------------------------")
+        
+        #Updating simulation
+        self.executeOperation()
         self.incrementPC()
         self.incrementCycle()
-        self.registerFile.print_all()
         if self.cycle == self.max_cycles:
             self.end = True
     
+    """
+    Method for printing conclussion at end of sim
+    """
     def endprint(self):
-        print("END OF SIMULATION")
-        print("Registers: ")
+        print("END OF SIMULATION\n")
         self.registerFile.print_all()
-        print("Data Memory: ")
+        print()
         self.dataMemory.print_all()
 
+#Run simulation
 sim = simulation()
 
 print('\n---Start of simulation---')
@@ -454,4 +493,4 @@ print('\n---Start of simulation---')
 while not sim.end:
     sim.executeCycle()
 
-sim.endprint
+sim.endprint()
