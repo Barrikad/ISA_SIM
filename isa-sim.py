@@ -1,7 +1,7 @@
 import sys
 import re
 
-print("\nWelcome to the ISA simulator! - Designed by <YOUR NAMES HERE>")
+print("\nWelcome to the ISA simulator! - Designed by Simon, Thomas and Sara")
 
 if len(sys.argv) < 4:
     print('Too few arguments.')
@@ -9,11 +9,6 @@ if len(sys.argv) < 4:
 elif (len(sys.argv) > 4):
     print('Too many arguments.')
     sys.exit(-1)
-
-'''
-The max_cycles variable contains the max_cycles passed to the script as argument.
-'''
-max_cycles = int(sys.argv[1])
 
 '''
 This class models the register file of the processor. It contains 16 8-bit unsigned
@@ -26,7 +21,9 @@ class RegisterFile:
         self.registers = {}
         for i in range(0, 16):
             self.registers['R'+str(i)] = 0
-
+        
+        self.functions = [{"NOP":self.NOP, "END":self.END},{"JR":self.JR},{"NOT":self.NOT, "LI":self.LI, "LD":self.LD, "SD":self.SD},{"ADD":self.ADD, "SUB":self.SUB, "OR":self.OR, "AND":self.AND, "JEQ":self.JEQ, "JLT":self.JLT}] #element 0 are 0-ary functions, element 1 are the 1-ary functions and so on
+        
     '''
     This method writes the content of the specified register.
     '''
@@ -67,7 +64,107 @@ class RegisterFile:
         print('Register file content:')
         for i in range(0, 16):
             self.print_register('R' + str(i))
+            
+    #Functions based on mf-ing currying!
+    #0ary
+    def NOP(self,simulation):
+        return 0
+    
+    def END(self,simulation):
+        print("End command reached")
+        simulation.end = True
+    
+    #1ary
+    def JR(self,simulation):
+        def layer1(r1):
+            simulation.jumpPC(self.read_register(r1) - 1)
+        return layer1
+      
+    #2ary
+    def NOT(self,simulation):
+        def layer1(r1):
+            def layer2(r2):
+                self.write_register(r1, ~self.read_register(r2))
+            return layer2
+        return layer1
+    
+    def LI(self,simulation):
+        def layer1(r1):
+            def layer2(x):
+                self.write_register(r1,int(x))
+            return layer2
+        return layer1
+    
+    def LD(self,simulation):
+        def layer1(r1):
+            def layer2(r2):
+                self.write_register(r1,simulation.dataMemory.read_data(self.read_register(r2)))
+            return layer2
+        return layer1
+    
+    def SD(self,simulation):
+        def layer1(r1):
+            def layer2(r2):
+                simulation.dataMemory.write_data(self.read_register(r2),self.read_register(r1))
+            return layer2
+        return layer1
+    
+    #3ary
+    def ADD(self,simulation):
+        def layer1(r1):
+            def layer2(r2):
+                def layer3(r3):
+                    self.write_register(r1, self.read_register(r2) + self.read_register(r3))
+                return layer3
+            return layer2
+        return layer1
 
+    def SUB(self,simulation):
+        def layer1(r1):
+            def layer2(r2):
+                def layer3(r3):
+                    self.write_register(r1, self.read_register(r2) - self.read_register(r3))
+                return layer3
+            return layer2
+        return layer1
+
+    def OR(self,simulation):
+        def layer1(r1):
+            def layer2(r2):
+                def layer3(r3):
+                    self.write_register(r1, self.read_register(r2) | self.read_register(r3))
+                return layer3
+            return layer2
+        return layer1
+
+    def AND(self,simulation):
+        def layer1(r1):
+            def layer2(r2):
+                def layer3(r3):
+                    self.write_register(r1, self.read_register(r2) & self.read_register(r3))
+                return layer3
+            return layer2
+        return layer1
+    
+    def JEQ(self,simulation):
+        def layer1(r1):
+            def layer2(r2):
+                def layer3(r3):
+                        if self.read_register(r2) == self.read_register(r3):
+                            simulation.jumpPC(self.read_register(r1) - 1)
+                return layer3
+            return layer2
+        return layer1
+    
+    def JLT(self,simulation):
+        def layer1(r1):
+            def layer2(r2):
+                def layer3(r3):
+                    if self.read_register(r2) < self.read_register(r3):
+                        simulation.jumpPC(self.read_register(r1) - 1)
+                return layer3
+            return layer2
+        return layer1
 
 '''
 This class models the data memory of the processor. When an object of the
@@ -170,6 +267,7 @@ memory locations contain the instruction NOP.
 class InstructionMemory:
     def __init__(self):
         self.instruction_memory = {}
+        self.operands = [self.read_operand_1, self.read_operand_2, self.read_operand_3]
         print('\nInitializing instruction memory content from file.')
         try:
             with open(sys.argv[2], 'r') as fd:
@@ -298,19 +396,62 @@ class InstructionMemory:
                 print('Address ' + str(address) + ' = ', end='')
                 self.print_instruction(address)
 
+class simulation:
+    def __init__(self):
+        self.PC = 0
+        self.cycle = 0
+        self.end = False
+        self.max_cycles = int(sys.argv[1])
+        self.registerFile = RegisterFile()
+        self.dataMemory = DataMemory()
+        self.instructionMemory = InstructionMemory()
+    
+    def incrementPC(self):
+        self.PC = (self.PC + 1) % 256
+    
+    def incrementCycle(self):
+        self.cycle += 1
+    
+    def jumpPC(self,gotoValue):
+        self.PC = gotoValue % 256
 
+    def executeOperation(self):
+        operation = self.instructionMemory.read_opcode(self.PC)
+        for i in range(4):
+            if operation in self.registerFile.functions[i]:
+                function = self.registerFile.functions[i][operation](self)
+                r = 0
+                while r < i:
+                    function = function(self.instructionMemory.operands[r](self.PC))
+                    r += 1
+                break
+            
+    def executeCycle(self):
+        print("----------------------------------")
+        print("Cycle: " + str(self.cycle))
+        print("PC: " + str(self.PC))
+        print("Instruction executed:")
+        self.instructionMemory.print_instruction(self.PC)
+        self.executeOperation()
+        print("----------------------------------")
+        self.incrementPC()
+        self.incrementCycle()
+        self.registerFile.print_all()
+        if self.cycle == self.max_cycles:
+            self.end = True
+    
+    def endprint(self):
+        print("END OF SIMULATION")
+        print("Registers: ")
+        self.registerFile.print_all()
+        print("Data Memory: ")
+        self.dataMemory.print_all()
 
-current_cycle=0
-program_counter=0
-
-registerFile = RegisterFile()
-dataMemory = DataMemory()
-instructionMemory = InstructionMemory()
+sim = simulation()
 
 print('\n---Start of simulation---')
 
-#####################################
-##      Write your code here      ##
-####################################
+while not sim.end:
+    sim.executeCycle()
 
-print('\n---End of simulation---\n')
+sim.endprint
